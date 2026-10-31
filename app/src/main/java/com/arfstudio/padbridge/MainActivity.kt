@@ -31,6 +31,11 @@ data class LaunchableApp(val packageName: String, val label: String)
 class MainActivity : ComponentActivity() {
     private lateinit var monitor: ControllerMonitor
     private lateinit var store: GameStore
+    private lateinit var mappingStore: MappingStore
+    private lateinit var calibrationStore: CalibrationStore
+    private val bindings = mutableStateListOf<TouchBinding>()
+    private val axes = mutableStateMapOf<Int, Float>()
+    private var selectedGame by mutableStateOf<String?>(null)
     private val controllers = mutableStateListOf<ControllerInfo>()
     private val games = mutableStateListOf<SavedGame>()
     private var diagnostic by mutableStateOf("Press a button or move an analog stick.")
@@ -39,6 +44,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = GameStore(applicationContext)
+        mappingStore = MappingStore(applicationContext)
+        calibrationStore = CalibrationStore(applicationContext)
         monitor = ControllerMonitor(applicationContext) { runOnUiThread { refreshControllers() } }
         refreshControllers()
         refreshGames()
@@ -47,9 +54,9 @@ class MainActivity : ComponentActivity() {
                 background = background, surface = panel, onSurface = white)) {
                 Scaffold(containerColor = background, bottomBar = {
                     NavigationBar(containerColor = panel) {
-                        listOf("Home", "Games", "Controller", "Profiles").forEachIndexed { index, title ->
+                        listOf("Home", "Games", "Controller", "Map", "Profiles").forEachIndexed { index, title ->
                             NavigationBarItem(selected = selectedPage == index, onClick = { selectedPage = index },
-                                icon = { Text(listOf("⌂", "▣", "◎", "≡")[index], fontSize = 20.sp) },
+                                icon = { Text(listOf("⌂", "▣", "◎", "⊕", "≡")[index], fontSize = 20.sp) },
                                 label = { Text(title) })
                         }
                     }
@@ -57,13 +64,14 @@ class MainActivity : ComponentActivity() {
                     Column(Modifier.fillMaxSize().padding(inner).padding(horizontal = 18.dp)) {
                         Spacer(Modifier.height(18.dp))
                         Text("PadBridge", color = white, fontWeight = FontWeight.Bold, fontSize = 28.sp)
-                        Text("PERSONAL GAMEPAD MAPPER • PHASE 1", color = accent, fontSize = 11.sp)
+                        Text("CONTROLLER STUDIO • LOCAL & PRIVATE", color = accent, fontSize = 11.sp)
                         Spacer(Modifier.height(20.dp))
                         when (selectedPage) {
                             0 -> HomeScreen(controllers, games) { selectedPage = it }
                             1 -> GameScreen(games, ::installedApps, ::addGame, ::removeGame, ::launchGame)
-                            2 -> ControllerScreen(controllers, diagnostic) { refreshControllers() }
-                            3 -> ProfileScreen(games, ::renameProfile)
+                            2 -> CalibrationLab(controllers, axes, diagnostic, calibrationStore::get, calibrationStore::save)
+                            3 -> MappingStudio(games, bindings, selectedGame, ::chooseGame, ::addBinding, ::moveBinding, ::removeBinding)
+                            4 -> ProfileScreen(games, ::renameProfile)
                         }
                     }
                 }
@@ -73,10 +81,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() { super.onResume(); monitor.start(); refreshControllers(); refreshGames() }
     override fun onPause() { monitor.stop(); super.onPause() }
-    override fun onDestroy() { store.close(); super.onDestroy() }
+    override fun onDestroy() { mappingStore.close(); store.close(); super.onDestroy() }
 
     private fun refreshControllers() { controllers.clear(); controllers.addAll(monitor.connected()) }
-    private fun refreshGames() { games.clear(); games.addAll(store.all()) }
+    private fun refreshGames() {
+        games.clear(); games.addAll(store.all())
+        if (selectedGame == null || games.none { it.packageName == selectedGame }) {
+            selectedGame = games.firstOrNull()?.packageName
+        }
+        refreshBindings()
+    }
+    private fun chooseGame(game: String) { selectedGame = game; refreshBindings() }
+    private fun refreshBindings() { bindings.clear(); selectedGame?.let { bindings.addAll(mappingStore.list(it)) } }
+    private fun addBinding(game: String, button: String) { mappingStore.add(game,button); refreshBindings() }
+    private fun moveBinding(id: Long, x: Float, y: Float) { mappingStore.move(id,x,y); refreshBindings() }
+    private fun removeBinding(id: Long) { mappingStore.delete(id); refreshBindings() }
     private fun addGame(app: LaunchableApp) { store.add(app.packageName, app.label); refreshGames() }
     private fun removeGame(packageName: String) { store.remove(packageName); refreshGames() }
     private fun renameProfile(packageName: String, value: String) {
@@ -107,6 +126,8 @@ class MainActivity : ComponentActivity() {
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
         if (event.source and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK &&
             event.action == MotionEvent.ACTION_MOVE) {
+            event.device?.motionRanges?.filter { it.source and InputDevice.SOURCE_CLASS_JOYSTICK != 0 }
+                ?.forEach { axes[it.axis] = event.getAxisValue(it.axis) }
             diagnostic = joystickSummary(event)
             if (selectedPage == 2) return true
         }
@@ -144,9 +165,9 @@ private fun HomeScreen(controllers: List<ControllerInfo>, games: List<SavedGame>
             Button(onClick = { navigate(1) }) { Text("Manage games") }
         }
         Panel {
-            Text("PHASE 1", color = accent)
-            Text("Controller diagnostics and local game profiles are available.", color = white)
-            Text("Touch mapping and background input capture are not implemented.", color = muted, fontSize = 12.sp)
+            Text("WHAT\u0027S NEW", color = accent)
+            Text("Controller calibration and touch layout editor are available.", color = white)
+            Text("Mappings save locally. In-game touch injection is still under development.", color = muted, fontSize = 12.sp)
         }
     }
 }
