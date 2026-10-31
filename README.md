@@ -24,3 +24,17 @@ Android 16 / API 36; minimum supported API 28. Debug builds are signed with the 
 5. Do not circumvent games' anti-cheat or device-integrity protections.
 
 No internet, analytics, account, or cloud backend is required by Phase 1.
+
+## Controller Studio upgrade (work in progress)
+
+- **Controller Lab** shows live foreground joystick axes and recent controller button input. It saves dead-zone (0–40%) and vertical inversion preferences separately for each detected controller.
+- **Mapping Studio** selects a saved game, adds a virtual touch target for a chosen controller button, drags it around a preview canvas, and stores normalized positions (0–1). Tap a target to select and delete it.
+- **Profiles** still support renaming a profile. The mapping editor currently stores one layout per game; multiple independent layouts and runtime input mapping are future steps.
+- Calibration preferences are not yet applied to game input. Mapping layout preview is **not an in-game overlay** and does **not** dispatch touchscreen events.
+- Existing games in `padbridge.db` are preserved; mappings use their own `padbridge-mappings.db`, and calibration is saved in private app preferences.
+
+### Controller test
+Pair your Bluetooth gamepad in Android Settings. Open Controller in PadBridge, press each button, move each stick and both triggers; verify the reported key names and axis values. Adjust a dead zone, save, leave the screen, and return to confirm persistence. Add a game, open Map, add A/B targets, drag them, switch tabs and return to verify stored placements.
+
+### Android 16 next milestone
+A production mapping engine will need foreground/background gamepad input feasibility tests, an explicit AccessibilityService for supported gesture dispatch, overlay permission and robust user-enabled activation. No such permission is currently requested or enabled. Do not interpret a successful cloud build as proof of game compatibility.
