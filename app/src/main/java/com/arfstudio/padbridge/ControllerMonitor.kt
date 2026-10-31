@@ -17,7 +17,7 @@ class ControllerMonitor(context: Context, private val onChanged: () -> Unit) : I
     override fun onInputDeviceAdded(deviceId: Int) = onChanged()
     override fun onInputDeviceRemoved(deviceId: Int) = onChanged()
     override fun onInputDeviceChanged(deviceId: Int) = onChanged()
-    fun connected(): List<ControllerInfo> = InputDevice.getDeviceIds().mapNotNull { id ->
+    fun connected(): List<ControllerInfo> = InputDevice.getDeviceIds().toList().mapNotNull { id ->
         val device = InputDevice.getDevice(id) ?: return@mapNotNull null
         val gamepad = device.sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
             device.sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
