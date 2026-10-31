@@ -1,0 +1,246 @@
+package com.arfstudio.padbridge
+
+import android.content.Intent
+import android.os.Bundle
+import android.view.InputDevice
+import android.view.KeyEvent
+import android.view.MotionEvent
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+private val background = Color(0xFF0B101B)
+private val panel = Color(0xFF151D2B)
+private val accent = Color(0xFF54D6C5)
+private val muted = Color(0xFF9BABBE)
+private val white = Color(0xFFF4F7FB)
+data class LaunchableApp(val packageName: String, val label: String)
+
+class MainActivity : ComponentActivity() {
+    private lateinit var monitor: ControllerMonitor
+    private lateinit var store: GameStore
+    private val controllers = mutableStateListOf<ControllerInfo>()
+    private val games = mutableStateListOf<SavedGame>()
+    private var diagnostic by mutableStateOf("Press a button or move an analog stick.")
+    private var selectedPage by mutableIntStateOf(0)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        store = GameStore(applicationContext)
+        monitor = ControllerMonitor(applicationContext) { runOnUiThread { refreshControllers() } }
+        refreshControllers()
+        refreshGames()
+        setContent {
+            MaterialTheme(colorScheme = darkColorScheme(primary = accent, onPrimary = background,
+                background = background, surface = panel, onSurface = white)) {
+                Scaffold(containerColor = background, bottomBar = {
+                    NavigationBar(containerColor = panel) {
+                        listOf("Home", "Games", "Controller", "Profiles").forEachIndexed { index, title ->
+                            NavigationBarItem(selected = selectedPage == index, onClick = { selectedPage = index },
+                                icon = { Text(listOf("⌂", "▣", "◎", "≡")[index], fontSize = 20.sp) },
+                                label = { Text(title) })
+                        }
+                    }
+                }) { inner ->
+                    Column(Modifier.fillMaxSize().padding(inner).padding(horizontal = 18.dp)) {
+                        Spacer(Modifier.height(18.dp))
+                        Text("PadBridge", color = white, fontWeight = FontWeight.Bold, fontSize = 28.sp)
+                        Text("PERSONAL GAMEPAD MAPPER • PHASE 1", color = accent, fontSize = 11.sp)
+                        Spacer(Modifier.height(20.dp))
+                        when (selectedPage) {
+                            0 -> HomeScreen(controllers, games) { selectedPage = it }
+                            1 -> GameScreen(games, ::installedApps, ::addGame, ::removeGame, ::launchGame)
+                            2 -> ControllerScreen(controllers, diagnostic) { refreshControllers() }
+                            3 -> ProfileScreen(games, ::renameProfile)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onResume() { super.onResume(); monitor.start(); refreshControllers(); refreshGames() }
+    override fun onPause() { monitor.stop(); super.onPause() }
+    override fun onDestroy() { store.close(); super.onDestroy() }
+
+    private fun refreshControllers() { controllers.clear(); controllers.addAll(monitor.connected()) }
+    private fun refreshGames() { games.clear(); games.addAll(store.all()) }
+    private fun addGame(app: LaunchableApp) { store.add(app.packageName, app.label); refreshGames() }
+    private fun removeGame(packageName: String) { store.remove(packageName); refreshGames() }
+    private fun renameProfile(packageName: String, value: String) {
+        if (value.isNotBlank()) { store.renameProfile(packageName, value.trim().take(60)); refreshGames() }
+    }
+    private fun launchGame(packageName: String) {
+        val intent = packageManager.getLaunchIntentForPackage(packageName)
+        if (intent != null) startActivity(intent)
+        else diagnostic = "This application cannot be launched."
+    }
+    private fun installedApps(): List<LaunchableApp> {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        @Suppress("DEPRECATION")
+        return packageManager.queryIntentActivities(intent, 0)
+            .map { LaunchableApp(it.activityInfo.packageName, it.loadLabel(packageManager).toString()) }
+            .filterNot { it.packageName == packageName }
+            .distinctBy { it.packageName }.sortedBy { it.label.lowercase() }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (isControllerKey(event)) {
+            diagnostic = "${KeyEvent.keyCodeToString(event.keyCode)}  •  ${if (event.action == KeyEvent.ACTION_DOWN) "DOWN" else "UP"}  •  device ${event.deviceId}"
+            if (selectedPage == 2) return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if (event.source and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK &&
+            event.action == MotionEvent.ACTION_MOVE) {
+            diagnostic = joystickSummary(event)
+            if (selectedPage == 2) return true
+        }
+        return super.dispatchGenericMotionEvent(event)
+    }
+}
+
+@Composable
+private fun Panel(content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)
+        .background(panel, RoundedCornerShape(16.dp)).padding(16.dp), content = content)
+}
+@Composable
+private fun Heading(title: String, subtitle: String) {
+    Text(title, color = white, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
+    Text(subtitle, color = muted, fontSize = 13.sp)
+    Spacer(Modifier.height(16.dp))
+}
+@Composable
+private fun HomeScreen(controllers: List<ControllerInfo>, games: List<SavedGame>, navigate: (Int) -> Unit) {
+    Column(Modifier.verticalScroll(rememberScrollState())) {
+        Heading("Your dashboard", "Your games and connected input devices")
+        Panel {
+            Text("CONTROLLER STATUS", color = muted, fontSize = 11.sp)
+            Text(if (controllers.isEmpty()) "No controller detected" else "${controllers.size} controller(s) connected",
+                color = accent, fontSize = 20.sp)
+            controllers.forEach { Text(it.name, color = white) }
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(onClick = { navigate(2) }) { Text("Open diagnostics") }
+        }
+        Panel {
+            Text("YOUR LIBRARY", color = muted, fontSize = 11.sp)
+            Text("${games.size} saved game(s)", color = white, fontSize = 20.sp)
+            Spacer(Modifier.height(10.dp))
+            Button(onClick = { navigate(1) }) { Text("Manage games") }
+        }
+        Panel {
+            Text("PHASE 1", color = accent)
+            Text("Controller diagnostics and local game profiles are available.", color = white)
+            Text("Touch mapping and background input capture are not implemented.", color = muted, fontSize = 12.sp)
+        }
+    }
+}
+@Composable
+private fun ControllerScreen(controllers: List<ControllerInfo>, diagnostic: String, refresh: () -> Unit) {
+    Column(Modifier.verticalScroll(rememberScrollState())) {
+        Heading("Controller diagnostics", "Pair your gamepad in Android Bluetooth settings")
+        OutlinedButton(onClick = refresh) { Text("Refresh devices") }
+        Spacer(Modifier.height(14.dp))
+        if (controllers.isEmpty()) Panel { Text("No compatible gamepad found.", color = white) }
+        controllers.forEach { pad ->
+            Panel {
+                Text(pad.name, color = accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Device ID: ${pad.id}", color = muted)
+                Text("Motion ranges: ${pad.axes}", color = muted)
+                Text("Descriptor: ${pad.descriptor.take(36)}", color = muted, fontSize = 11.sp)
+            }
+        }
+        Panel {
+            Text("LIVE INPUT", color = accent, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Text(diagnostic, color = white, fontSize = 15.sp)
+            Spacer(Modifier.height(8.dp))
+            Text("Events are visible only while PadBridge is the foreground app.", color = muted, fontSize = 12.sp)
+        }
+    }
+}
+@Composable
+private fun GameScreen(games: List<SavedGame>, installed: () -> List<LaunchableApp>,
+    add: (LaunchableApp) -> Unit, remove: (String) -> Unit, launch: (String) -> Unit) {
+    var picker by remember { mutableStateOf(false) }
+    var search by remember { mutableStateOf("") }
+    val apps = remember(picker) { if (picker) installed() else emptyList() }
+    Column {
+        Heading("Game library", "Add games from installed Android apps")
+        Button(onClick = { picker = true }) { Text("+ Add game") }
+        Spacer(Modifier.height(12.dp))
+        if (games.isEmpty()) Text("No games added yet.", color = muted)
+        LazyColumn {
+            items(games, key = { it.packageName }) { game ->
+                Panel {
+                    Text(game.label, color = white, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text(game.packageName, color = muted, fontSize = 11.sp, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis)
+                    Text("Profile: ${game.profileName}", color = accent, fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { launch(game.packageName) }) { Text("Launch") }
+                        OutlinedButton(onClick = { remove(game.packageName) }) { Text("Remove") }
+                    }
+                }
+            }
+        }
+    }
+    if (picker) AlertDialog(onDismissRequest = { picker = false },
+        title = { Text("Choose an installed game") },
+        text = {
+            Column {
+                OutlinedTextField(value = search, onValueChange = { search = it },
+                    label = { Text("Search apps") }, singleLine = true)
+                Spacer(Modifier.height(12.dp))
+                LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                    items(apps.filter {
+                        it.label.contains(search, true) || it.packageName.contains(search, true)
+                    }) { app ->
+                        Text(app.label, Modifier.fillMaxWidth().clickable {
+                            add(app); picker = false; search = ""
+                        }.padding(12.dp), color = white)
+                    }
+                }
+            }
+        }, confirmButton = {
+            TextButton(onClick = { picker = false }) { Text("Close") }
+        })
+}
+@Composable
+private fun ProfileScreen(games: List<SavedGame>, rename: (String, String) -> Unit) {
+    Column {
+        Heading("Saved profiles", "One named profile per game in Phase 1")
+        if (games.isEmpty()) Text("Add a game to create its default profile.", color = muted)
+        LazyColumn {
+            items(games, key = { it.packageName }) { game ->
+                var edited by remember(game.packageName, game.profileName) {
+                    mutableStateOf(game.profileName)
+                }
+                Panel {
+                    Text(game.label, color = white, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(value = edited, onValueChange = { edited = it.take(60) },
+                        label = { Text("Profile name") }, singleLine = true)
+                    Spacer(Modifier.height(8.dp))
+                    Button(enabled = edited.trim().isNotEmpty() && edited.trim() != game.profileName,
+                        onClick = { rename(game.packageName, edited) }) { Text("Save name") }
+                    Text("Mapping layouts arrive in Phase 2.", color = muted, fontSize = 11.sp)
+                }
+            }
+        }
+    }
+}
