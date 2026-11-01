@@ -38,3 +38,18 @@ Pair your Bluetooth gamepad in Android Settings. Open Controller in PadBridge, p
 
 ### Android 16 next milestone
 A production mapping engine will need foreground/background gamepad input feasibility tests, an explicit AccessibilityService for supported gesture dispatch, overlay permission and robust user-enabled activation. No such permission is currently requested or enabled. Do not interpret a successful cloud build as proof of game compatibility.
+
+## Premium teal/cyan redesign
+
+PadBridge now uses an original gaming-focused look: deep navy backgrounds, teal/cyan highlights, rounded utility cards, clear status indicators, and six screens (Home, Games, Lab, Map, Profiles, Setup). The design follows familiar controller-mapper usability patterns without reproducing third-party artwork or branding.
+
+### Supported today
+- Home: controller status, saved game count, active touch target count and shortcuts.
+- Games: discover installed apps, configure, launch and remove with a removal confirmation.
+- Lab: foreground button diagnostics, analog stick visualizers, calibration settings.
+- Map: saved target positioning with grid canvas, game selection, edit and delete.
+- Profiles: rename stored profile and jump to that game's editor.
+- Setup: guided pairing/calibration/mapping instructions and implementation status.
+
+### Still not implemented
+The mapping screen is a saved layout editor, not an Android system overlay. It does not inject touches while another game is running. AccessibilityService, controller interception outside PadBridge, touch gesture accuracy, orientation-specific profiles, and runtime activation all require separate Android 16 implementation and device validation.
