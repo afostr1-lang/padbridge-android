@@ -121,7 +121,7 @@ fun PremiumDashboard(controllers: List<ControllerInfo>, games: List<SavedGame>,
         SectionLabel("Setup & activation", "View guide") { navigate(5) }
         DesignCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.InfoOutline, null, tint = PbAccent2)
+                Icon(Icons.Default.Info, null, tint = PbAccent2)
                 Spacer(Modifier.width(10.dp))
                 Text("Mapping engine not activated", color = PbText, fontWeight = FontWeight.SemiBold)
             }
