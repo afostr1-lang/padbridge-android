@@ -13,6 +13,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,11 +24,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val background = Color(0xFF0B101B)
-private val panel = Color(0xFF151D2B)
-private val accent = Color(0xFF54D6C5)
-private val muted = Color(0xFF9BABBE)
-private val white = Color(0xFFF4F7FB)
+private val background = PbBackground
+private val panel = PbSurface
+private val accent = PbAccent
+private val muted = PbMuted
+private val white = PbText
 data class LaunchableApp(val packageName: String, val label: String)
 
 class MainActivity : ComponentActivity() {
@@ -50,28 +53,51 @@ class MainActivity : ComponentActivity() {
         refreshControllers()
         refreshGames()
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(primary = accent, onPrimary = background,
-                background = background, surface = panel, onSurface = white)) {
-                Scaffold(containerColor = background, bottomBar = {
-                    NavigationBar(containerColor = panel) {
-                        listOf("Home", "Games", "Controller", "Map", "Profiles").forEachIndexed { index, title ->
-                            NavigationBarItem(selected = selectedPage == index, onClick = { selectedPage = index },
-                                icon = { Text(listOf("⌂", "▣", "◎", "⊕", "≡")[index], fontSize = 20.sp) },
-                                label = { Text(title) })
+            MaterialTheme(colorScheme = darkColorScheme(primary = PbAccent, secondary = PbAccent2,
+                onPrimary = PbBackground, background = PbBackground, surface = PbSurface,
+                onSurface = PbText, surfaceVariant = PbSurfaceElevated)) {
+                Scaffold(containerColor = PbBackground,
+                    bottomBar = {
+                        NavigationBar(containerColor = PbSurface, tonalElevation = 0.dp) {
+                            listOf("Home","Games","Lab","Map","Profiles","Setup").forEachIndexed { index, title ->
+                                val icon = when(index) {
+                                    0 -> Icons.Default.Home
+                                    1 -> Icons.Default.SportsEsports
+                                    2 -> Icons.Default.Tune
+                                    3 -> Icons.Default.TouchApp
+                                    4 -> Icons.Default.Layers
+                                    else -> Icons.Default.Settings
+                                }
+                                NavigationBarItem(
+                                    selected = selectedPage == index,
+                                    onClick = { selectedPage = index },
+                                    icon = { Icon(icon, title) },
+                                    label = { Text(title, fontSize = 10.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = PbBackground,
+                                        selectedTextColor = PbAccent,
+                                        indicatorColor = PbAccent,
+                                        unselectedIconColor = PbMuted,
+                                        unselectedTextColor = PbMuted)
+                                )
+                            }
                         }
-                    }
-                }) { inner ->
-                    Column(Modifier.fillMaxSize().padding(inner).padding(horizontal = 18.dp)) {
-                        Spacer(Modifier.height(18.dp))
-                        Text("PadBridge", color = white, fontWeight = FontWeight.Bold, fontSize = 28.sp)
-                        Text("CONTROLLER STUDIO • LOCAL & PRIVATE", color = accent, fontSize = 11.sp)
-                        Spacer(Modifier.height(20.dp))
+                    }) { inner ->
+                    Column(Modifier.fillMaxSize().padding(inner).padding(horizontal = 16.dp)) {
+                        PadBridgeHeader()
+                        Spacer(Modifier.height(6.dp))
                         when (selectedPage) {
-                            0 -> HomeScreen(controllers, games) { selectedPage = it }
-                            1 -> GameScreen(games, ::installedApps, ::addGame, ::removeGame, ::launchGame)
-                            2 -> CalibrationLab(controllers, axes, diagnostic, calibrationStore::get, calibrationStore::save)
-                            3 -> MappingStudio(games, bindings, selectedGame, ::chooseGame, ::addBinding, ::moveBinding, ::removeBinding)
-                            4 -> ProfileScreen(games, ::renameProfile)
+                            0 -> PremiumDashboard(controllers, games, bindings.size) { selectedPage = it }
+                            1 -> PremiumGames(games, ::installedApps, ::addGame, ::removeGame,
+                                ::launchGame) { chooseGame(it); selectedPage = 3 }
+                            2 -> CalibrationLab(controllers, axes, diagnostic,
+                                calibrationStore::get, calibrationStore::save)
+                            3 -> MappingStudio(games, bindings, selectedGame, ::chooseGame,
+                                ::addBinding, ::moveBinding, ::removeBinding)
+                            4 -> PremiumProfiles(games, ::renameProfile) {
+                                chooseGame(it); selectedPage = 3
+                            }
+                            5 -> PremiumSetup({ selectedPage = 2 }, { selectedPage = 3 })
                         }
                     }
                 }
