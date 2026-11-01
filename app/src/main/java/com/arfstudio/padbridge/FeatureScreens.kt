@@ -6,6 +6,11 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,11 +26,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
-private val surface = Color(0xFF172232)
-private val outline = Color(0xFF304457)
-private val teal = Color(0xFF55DBC7)
-private val soft = Color(0xFFB5C5D7)
-private val paper = Color(0xFFF4F8FC)
+private val surface = PbSurface
+private val outline = PbStroke
+private val teal = PbAccent
+private val soft = PbMuted
+private val paper = PbText
 private val buttons = listOf("A","B","X","Y","L1","R1","L2","R2","D-Pad Up","D-Pad Down","D-Pad Left","D-Pad Right","L3","R3","Start","Select")
 
 @Composable
@@ -46,9 +51,9 @@ fun CalibrationLab(controllers: List<ControllerInfo>, axes: Map<Int, Float>, lat
         mutableStateOf(current?.let { read(it.descriptor).invertY } ?: false)
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Controller Lab", fontSize = 25.sp, color = paper, fontWeight = FontWeight.Bold)
-        Text("Real-time diagnostics and calibration", color = soft)
+        Text("Test inputs, tune analog sensitivity, and save settings", color = soft)
         LabCard {
             Text(if (current == null) "No controller connected" else "● " + current.name,
                 color = teal, fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -56,6 +61,7 @@ fun CalibrationLab(controllers: List<ControllerInfo>, axes: Map<Int, Float>, lat
         }
         LabCard {
             Text("LIVE INPUT", color = teal, fontWeight = FontWeight.Bold)
+            ControllerVisualizer(axes)
             Text(latestEvent, color = paper, fontSize = 14.sp)
             axes.toSortedMap().forEach { (axis, value) ->
                 Text(MotionEvent.axisToString(axis) + "  " + String.format(java.util.Locale.US,"%.2f",value),
@@ -92,7 +98,13 @@ fun MappingStudio(games: List<SavedGame>, mappings: List<TouchBinding>,
     var active by remember { mutableStateOf<Long?>(null) }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Mapping Studio", fontWeight = FontWeight.Bold, fontSize = 25.sp, color = paper)
-        Text("Arrange controller buttons as touchscreen targets", color = soft, fontSize = 13.sp)
+        Text("Touch control layout editor", color = soft, fontSize = 13.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Icon(Icons.Default.Layers, null, tint = teal, modifier = Modifier.size(16.dp))
+            Text("GAME PROFILE", color = teal, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            Text("PREVIEW MODE", color = soft, fontSize = 10.sp)
+        }
         if (games.isEmpty()) {
             LabCard { Text("Add a game in the Games tab to begin.", color = soft) }
         } else {
@@ -109,15 +121,26 @@ fun MappingStudio(games: List<SavedGame>, mappings: List<TouchBinding>,
                     }
                 }
             }
-            Text("Drag targets around the preview area. Position saves on release.", color = soft, fontSize = 12.sp)
+            Text("Place each mapped button over its matching on-screen control.", color = soft, fontSize = 12.sp)
             BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).heightIn(min = 210.dp)
                 .clip(RoundedCornerShape(16.dp)).background(Color(0xFF101A29))
                 .border(1.dp, outline, RoundedCornerShape(16.dp))) {
                 val w = constraints.maxWidth.toFloat()
                 val h = constraints.maxHeight.toFloat()
+                Canvas(Modifier.matchParentSize()) {
+                    val grid = Color(0xFF264056)
+                    for (i in 1..7) {
+                        val x = size.width*i/8f
+                        drawLine(grid.copy(alpha=.35f), Offset(x,0f), Offset(x,size.height), strokeWidth=1f)
+                    }
+                    for (i in 1..5) {
+                        val y = size.height*i/6f
+                        drawLine(grid.copy(alpha=.35f), Offset(0f,y), Offset(size.width,y), strokeWidth=1f)
+                    }
+                }
                 Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("TOUCH CANVAS", color = Color(0xFF506A80), fontWeight = FontWeight.Bold)
-                    Text("Normalized position preview", color = Color(0xFF506A80), fontSize = 11.sp)
+                    Text("Drag to arrange · tap to select", color = Color(0xFF506A80), fontSize = 11.sp)
                 }
                 mappings.forEach { binding ->
                     key(binding.id) {
@@ -147,7 +170,7 @@ fun MappingStudio(games: List<SavedGame>, mappings: List<TouchBinding>,
                 OutlinedButton(onClick = { active?.let(remove); active = null },
                     enabled = active != null) { Text("Delete selected") }
             }
-            Text(mappings.size.toString() + " saved targets · Preview only. Touch injection is not active.",
+            Text(mappings.size.toString() + " targets saved · In-game mapping engine is not active yet.",
                 color = soft, fontSize = 11.sp)
         }
     }
@@ -162,4 +185,33 @@ fun MappingStudio(games: List<SavedGame>, mappings: List<TouchBinding>,
         } }, confirmButton = {
             TextButton(onClick = { showPicker = false }) { Text("Cancel") }
         })
+}
+
+@Composable
+private fun ControllerVisualizer(axes: Map<Int, Float>) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        AnalogDisplay("LEFT STICK", axes[MotionEvent.AXIS_X] ?: 0f, axes[MotionEvent.AXIS_Y] ?: 0f)
+        AnalogDisplay("RIGHT STICK", axes[MotionEvent.AXIS_Z] ?: 0f, axes[MotionEvent.AXIS_RZ] ?: 0f)
+    }
+}
+
+@Composable
+private fun AnalogDisplay(label: String, x: Float, y: Float) {
+    Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Canvas(Modifier.size(105.dp)) {
+            val center = Offset(size.width/2f,size.height/2f)
+            val radius = size.minDimension*.44f
+            drawCircle(Color(0xFF0D192B),radius)
+            drawCircle(PbStroke,radius,style=Stroke(width=3f))
+            drawLine(PbStroke,Offset(center.x-radius,center.y),Offset(center.x+radius,center.y))
+            drawLine(PbStroke,Offset(center.x,center.y-radius),Offset(center.x,center.y+radius))
+            drawCircle(PbAccent.copy(alpha=.24f),radius*.34f,
+                center+Offset(x.coerceIn(-1f,1f)*radius*.78f,y.coerceIn(-1f,1f)*radius*.78f))
+            drawCircle(PbAccent,radius*.18f,
+                center+Offset(x.coerceIn(-1f,1f)*radius*.78f,y.coerceIn(-1f,1f)*radius*.78f))
+        }
+        Text(label, color = PbMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    }
 }
